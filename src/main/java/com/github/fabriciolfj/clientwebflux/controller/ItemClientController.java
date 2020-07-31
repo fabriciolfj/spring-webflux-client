@@ -1,20 +1,23 @@
 package com.github.fabriciolfj.clientwebflux.controller;
 
 import com.github.fabriciolfj.clientwebflux.domain.Item;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+@Slf4j
 @RestController
 public class ItemClientController {
 
     private WebClient webClient = WebClient.create("http://localhost:8080");
 
     /*
-    * retorna direto o corpo da requisição
-    * */
+     * retorna direto o corpo da requisição
+     * */
     @GetMapping("/client/retrieve")
     public Flux<Item> getAllItemsUsingRetrieve() {
         return webClient.get().uri("/v2/items")
@@ -24,8 +27,8 @@ public class ItemClientController {
     }
 
     /*
-    * Me retorna a requisição, corpo headers e etc
-    * */
+     * Me retorna a requisição, corpo headers e etc
+     * */
     @GetMapping("/client/exchange")
     public Flux<Item> getAllItemsUsingExchange() {
         return webClient.get().uri("/v2/items")
@@ -82,6 +85,39 @@ public class ItemClientController {
         return webClient.delete().uri("v2/items/" + id)
                 .retrieve()
                 .bodyToMono(Void.class);
+    }
+
+    @GetMapping("/client/error")
+    public Flux<Item> errorRetrieve() {
+        return webClient.get()
+                .uri("/v2/error")
+                .retrieve()
+                .onStatus(HttpStatus::is5xxServerError, clientResponse -> {
+                    Mono<String> errorMono = clientResponse.bodyToMono(String.class);
+                    return errorMono.flatMap(error -> {
+                        log.error("The error message is: " + error);
+                        throw new RuntimeException(error);
+                    });
+                })
+                .bodyToFlux(Item.class);
+    }
+
+    @GetMapping("/client/error2")
+    public Flux<Item> errorExchange() {
+        return webClient.get()
+                .uri("/v2/error")
+                .exchange()
+                .flatMapMany(clientResponse -> {
+                    if (clientResponse.statusCode().is5xxServerError()) {
+                        return clientResponse.bodyToMono(String.class)
+                                .flatMap(errorMessage -> {
+                                    log.error("Error message in exchange: " + errorMessage);
+                                    throw new RuntimeException(errorMessage);
+                                });
+                    } else {
+                        return clientResponse.bodyToFlux(Item.class);
+                    }
+                });
     }
 
 }
