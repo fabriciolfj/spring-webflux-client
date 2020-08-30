@@ -8,12 +8,15 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 @Slf4j
 @RestController
 public class ItemClientController {
 
     private WebClient webClient = WebClient.create("http://localhost:8080");
+    private Scheduler scheduler = Schedulers.newBoundedElastic(5, 10, "MyThreadGroup");
 
     /*
      * retorna direto o corpo da requisição
@@ -43,6 +46,19 @@ public class ItemClientController {
         return webClient.get().uri("/v2/items/" + id)
                 .retrieve()
                 .bodyToMono(Item.class)
+                .log("Mono item");
+
+    }
+
+    @GetMapping("/client/retrieve/singleItemThread")
+    public Mono<Item> getSingleDataThread() {
+        String id = "ABC";
+        return webClient.get().uri("/v2/items/" + id)
+                .retrieve()
+                .bodyToMono(Item.class)
+                .subscribeOn(scheduler) //altera o contexto da fonte de emissão
+                .publishOn(scheduler) //alternat o contexto de execução
+                .doOnNext(s -> log.info("Response: " + s))
                 .log("Mono item");
 
     }
